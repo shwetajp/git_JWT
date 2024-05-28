@@ -230,9 +230,13 @@ app.post("/login", async (req, res) => {
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (passwordMatch) {
-      const token = jwt.sign({ username: user.username }, SECRET_KEY, {
-        expiresIn: "1h",
-      });
+      const token = jwt.sign(
+        { username: user.username, userId: user._id },
+        SECRET_KEY,
+        {
+          expiresIn: "1h",
+        }
+      );
       res.json({ token });
     } else {
       res.status(401).send("Username or password incorrect");
@@ -260,8 +264,8 @@ const authenticateJWT = (req, res, next) => {
   // } else {
   //   res.sendStatus(401);
   // }
-
-  const token = req.headers["authorization"];
+  console.log("entered Auth");
+  const token = req.headers["authorization"].split(" ")[1];
   console.log("JWT Token:", token);
   if (!token) {
     console.log("not authorized");
@@ -269,12 +273,14 @@ const authenticateJWT = (req, res, next) => {
   }
 
   try {
+    console.log("JWT Token:", token, SECRET_KEY);
     // const decoded = jwt.verify(token,config.secret);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, SECRET_KEY);
     console.log("decoded", decoded);
     req.user = decoded;
     next();
   } catch (e) {
+    console.log(e.message);
     res.status(400).json("Token not valid");
   }
 };
@@ -282,7 +288,10 @@ const authenticateJWT = (req, res, next) => {
 // Recipe CRUD routes
 app.get("/recipes", authenticateJWT, async (req, res) => {
   try {
-    const recipes = await Recipe.find({ userId: req.user.username });
+    // const recipes = await Recipe.find({ userId: req.user.username });
+    console.log(req.user.userId);
+    const recipes = await Recipe.find({ userId: req.user.userId });
+    console.log(recipes);
     if (!recipes || recipes.length === 0) {
       return res.status(404).send("No recipes found for this user");
     }
@@ -296,7 +305,12 @@ app.get("/recipes", authenticateJWT, async (req, res) => {
 app.post("/recipes", authenticateJWT, async (req, res) => {
   try {
     console.log("Request Body:", req.body);
-    const newRecipe = new Recipe({ ...req.body, userId: req.user.username });
+    // const newRecipe = new Recipe({ ...req.body, userId: req.user.username });
+    // console.log("objectid issssssssss :", req.user);
+    const newRecipe = new Recipe({
+      ...req.body,
+      userId: req.user.userId,
+    });
     console.log("New Recipe:", newRecipe);
     await newRecipe.save();
     console.log("Recipe Saved Successfully");
@@ -324,6 +338,9 @@ app.put("/recipes/:id", authenticateJWT, async (req, res) => {
 
 app.delete("/recipes/:id", authenticateJWT, async (req, res) => {
   try {
+    console.log("param id", req.params.id);
+    // console.log("user id", recipe.userId);
+    console.log("user name", req.user.username);
     const recipe = await Recipe.findById(req.params.id);
     if (!recipe || recipe.userId !== req.user.username) {
       return res.status(403).send("Unauthorized");

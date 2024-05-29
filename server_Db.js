@@ -323,13 +323,38 @@ app.post("/recipes", authenticateJWT, async (req, res) => {
 
 app.put("/recipes/:id", authenticateJWT, async (req, res) => {
   try {
-    const recipe = await Recipe.findById(req.params.id);
-    if (!recipe || recipe.userId !== req.user.username) {
+    const recipeId = req.params.id.trim(); // Ensure the ID is trimmed
+    console.log("Recipe Id:", recipeId);
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(recipeId)) {
+      return res.status(400).send("Invalid recipe ID");
+    }
+
+    // Check if the recipe exists
+    const existingRecipe = await Recipe.findById(recipeId);
+    console.log("existing:::", existingRecipe);
+    if (!existingRecipe) {
+      return res.status(404).send("Recipe not found");
+    }
+
+    // Checking if the user is authorized to update the recipe
+    console.log("existing recipe::", existingRecipe.userId);
+    console.log("userId::", req.user.userId);
+    if (existingRecipe.userId.toString() !== req.user.userId) {
       return res.status(403).send("Unauthorized");
     }
-    Object.assign(recipe, req.body);
-    await recipe.save();
-    res.json(recipe);
+
+    // Update the recipe using findByIdAndUpdate
+    const updatedRecipe = await Recipe.findByIdAndUpdate(recipeId, req.body, {
+      new: true,
+    });
+
+    if (!updatedRecipe) {
+      return res.status(404).send("Recipe not found"); // Handle edge case where recipe was not found after update
+    }
+
+    res.json(updatedRecipe);
   } catch (error) {
     console.error("Error updating recipe:", error);
     res.status(500).send("Internal server error");
@@ -338,14 +363,25 @@ app.put("/recipes/:id", authenticateJWT, async (req, res) => {
 
 app.delete("/recipes/:id", authenticateJWT, async (req, res) => {
   try {
-    console.log("param id", req.params.id);
-    // console.log("user id", recipe.userId);
-    console.log("user name", req.user.username);
-    const recipe = await Recipe.findById(req.params.id);
-    if (!recipe || recipe.userId !== req.user.username) {
+    const recipeId = req.params.id.trim(); // Ensure the ID is trimmed
+    console.log("delete id is:", recipeId);
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(recipeId)) {
+      return res.status(400).send("Invalid recipe ID");
+    }
+
+    const recipe = await Recipe.findById(recipeId);
+
+    if (!recipe) {
+      return res.status(404).send("Recipe not found");
+    }
+
+    if (recipe.userId.toString() !== req.user.userId) {
       return res.status(403).send("Unauthorized");
     }
-    await recipe.remove();
+
+    await Recipe.deleteOne({ _id: recipeId });
     res.send("Recipe deleted successfully");
   } catch (error) {
     console.error("Error deleting recipe:", error);
